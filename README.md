@@ -16,6 +16,7 @@ Selecione imagens JPG e PNG no Windows e escolha entre reunir tudo em um PDF ou 
 
 - Conversão de JPG, JPEG e PNG para PDF.
 - Prévias das imagens na lista, com nome e dimensões.
+- Botões para girar a imagem selecionada 90° à esquerda ou à direita.
 - Um PDF único com várias páginas ou um PDF individual por imagem.
 - Ordem inicial pelo nome, com ajuste pelos botões Subir e Descer.
 - Página no tamanho da imagem, sem margens, ou A4 sem recortar.
@@ -31,11 +32,13 @@ Selecione imagens JPG e PNG no Windows e escolha entre reunir tudo em um PDF ou 
 2. Extraia o ZIP e execute `Instalar.cmd`.
 3. Selecione uma ou várias fotos JPG/PNG e clique com o botão direito.
 4. Escolha **Criar PDF com as imagens**. No Windows 11, a opção fica dentro de **Mostrar mais opções**.
-5. Confira as prévias e escolha **Juntar em um PDF** ou **Um PDF por imagem**.
+5. Confira as prévias. Selecione uma imagem para usar **Girar à esquerda** ou **Girar à direita**. Escolha **Juntar em um PDF** ou **Um PDF por imagem**.
 6. Escolha o tamanho da página: **Igual à imagem (sem margens)** ou **A4**.
 7. Clique em **Criar PDF...** ou **Criar PDFs...**. No modo individual, escolha a pasta de destino.
 
 No modo individual, o nome da imagem vira o nome do PDF. Se o destino já existir, o programa acrescenta `(2)`, `(3)` e assim por diante, preservando os arquivos anteriores. Ao terminar, a confirmação aparece na janela, sem diálogo para abrir os resultados.
+
+Cada clique em um botão de giro aplica 90° à imagem selecionada. A prévia muda na hora e a mesma rotação é aplicada ao PDF, após a orientação EXIF de fotos de celular. A rotação é mantida ao reordenar as imagens ou trocar o modo de saída. Os arquivos originais não são alterados.
 
 O programa também pode ser aberto diretamente pelo executável. A instalação é feita apenas para o usuário atual, em `%LOCALAPPDATA%\FotosParaPdf`.
 
@@ -78,14 +81,14 @@ A integração do menu chama o executável diretamente. Invocações simultânea
 - Novas seleções são adicionadas à janela aberta; confira os itens antes de salvar.
 - HEIC e WebP não são aceitos nesta versão.
 
-## Validação da versão 1.3
+## Validação da versão 1.4
 
-Foram verificados os modos único e individual, nomes repetidos sem sobrescrita, falha parcial com imagem inválida, páginas no tamanho da imagem sem margens, tamanho físico em 300 DPI, A4, orientação EXIF, transparência, JPG em escala de cinza e CMYK e preservação dos originais. O agrupamento de invocações simultâneas foi verificado. As prévias e as páginas renderizadas foram inspecionadas visualmente.
+Foram verificados giros de 90°, 180° e 270°, inversão entre os botões, volta completa, giro durante o carregamento da prévia, preservação da rotação ao reordenar ou adicionar imagens e combinação com EXIF. A orientação dos pixels nos PDFs único e individual foi conferida. Também foram verificados os recursos anteriores, incluindo colisões de nomes, falha parcial, DPI, A4, transparência e preservação dos originais. As prévias e páginas renderizadas foram inspecionadas visualmente.
 
 A conversão foi validada programaticamente. O fluxo pelo menu do Explorador precisa ser verificado no Windows de destino.
 
 ## Versão atual
 
-O pacote instalável da versão **1.3.0** inclui o executável, o ícone e os comandos para instalar e desinstalar a integração. O executável mantém o nome `FotosParaPdf.exe` para compatibilidade com instalações anteriores.
+O pacote instalável da versão **1.4.0** inclui o executável, o ícone e os comandos para instalar e desinstalar a integração. O executável mantém o nome `FotosParaPdf.exe` para compatibilidade com instalações anteriores.
 
 Referências: [modelo de seleção do Shell](https://learn.microsoft.com/en-us/windows/win32/shell/how-to-employ-the-verb-selection-model) e [pipe local do .NET](https://learn.microsoft.com/en-us/dotnet/api/system.io.pipes.namedpipeserverstream).

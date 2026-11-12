@@ -36,6 +36,18 @@ namespace FotosParaPdf
             if (orientation >= 2 && orientation <= 8) image.RotateFlip(rotations[orientation]);
             return orientation;
         }
+
+        internal static int NormalizeTurns(int turns) { return (turns % 4 + 4) % 4; }
+
+        internal static void ApplyQuarterTurns(Image image, int turns)
+        {
+            switch (NormalizeTurns(turns))
+            {
+                case 1: image.RotateFlip(RotateFlipType.Rotate90FlipNone); break;
+                case 2: image.RotateFlip(RotateFlipType.Rotate180FlipNone); break;
+                case 3: image.RotateFlip(RotateFlipType.Rotate270FlipNone); break;
+            }
+        }
     }
 
     internal sealed class MainForm : Form
@@ -53,6 +65,8 @@ namespace FotosParaPdf
         private readonly SemaphoreSlim thumbnailSlots = new SemaphoreSlim(2);
         private readonly Font fileFont = new Font("Segoe UI", 11F, FontStyle.Bold);
         private readonly Font detailFont = new Font("Segoe UI", 9F);
+        private Button rotateLeft;
+        private Button rotateRight;
         private bool busy;
         private bool closing;
         private int hoverIndex = -1;
@@ -68,7 +82,7 @@ namespace FotosParaPdf
             BackColor = Color.FromArgb(246, 248, 251);
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(790, 700);
-            MinimumSize = new Size(700, 590);
+            MinimumSize = new Size(760, 590);
             AutoScaleMode = AutoScaleMode.Dpi;
             AllowDrop = true;
 
@@ -79,7 +93,7 @@ namespace FotosParaPdf
             foreach (float height in new[] { 48F, 28F, 56F }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
             Controls.Add(layout);
             layout.Controls.Add(new Label { Text = "Suas imagens, do seu jeito", Font = new Font("Segoe UI", 20, FontStyle.Bold), AutoSize = true }, 0, 0);
-            layout.Controls.Add(new Label { Text = "Confira as prévias e escolha como salvar.\nTudo acontece neste computador; os originais são preservados.", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(76, 88, 106) }, 0, 1);
+            layout.Controls.Add(new Label { Text = "Confira as prévias e gire as imagens antes de salvar.\nTudo acontece neste computador; os originais são preservados.", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(76, 88, 106) }, 0, 1);
 
             var modePanel = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
             combined.Text = "Juntar em um PDF";
@@ -134,6 +148,10 @@ namespace FotosParaPdf
             AddButton(toolbar, "Subir", delegate { MovePhoto(-1); }, 72);
             AddButton(toolbar, "Descer", delegate { MovePhoto(1); }, 72);
             AddButton(toolbar, "Remover", RemovePhoto, 94);
+            rotateLeft = AddButton(toolbar, "Girar à esquerda", delegate { RotateSelected(-1); }, 128);
+            rotateRight = AddButton(toolbar, "Girar à direita", delegate { RotateSelected(1); }, 128);
+            toolTip.SetToolTip(rotateLeft, "Girar a imagem selecionada 90° para a esquerda");
+            toolTip.SetToolTip(rotateRight, "Girar a imagem selecionada 90° para a direita");
             layout.Controls.Add(toolbar, 0, 6);
             progress.Dock = DockStyle.Fill;
             progress.Margin = new Padding(0, 7, 0, 7);
@@ -178,18 +196,21 @@ namespace FotosParaPdf
             var title = new Rectangle(box.Right + 16, e.Bounds.Y + 18, Math.Max(1, e.Bounds.Width - 132), 28);
             var detail = new Rectangle(title.X, e.Bounds.Y + 50, title.Width, 24);
             TextRenderer.DrawText(e.Graphics, (e.Index + 1) + ". " + photo.Name, fileFont, title, Color.FromArgb(24, 39, 63), TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
-            string description = photo.Error != null ? "Não foi possível carregar a prévia" : photo.Completed ? photo.Width + " × " + photo.Height + " pixels  ·  " + (SeparateMode ? "PDF individual" : "Página " + (e.Index + 1)) : "Preparando a prévia";
+            int width = photo.QuarterTurns % 2 == 0 ? photo.Width : photo.Height;
+            int height = photo.QuarterTurns % 2 == 0 ? photo.Height : photo.Width;
+            string description = photo.Error != null ? "Não foi possível carregar a prévia" : photo.Completed ? width + " × " + height + " pixels  ·  " + (SeparateMode ? "PDF individual" : "Página " + (e.Index + 1)) + (photo.QuarterTurns == 0 ? "" : "  ·  girada") : "Preparando a prévia";
             TextRenderer.DrawText(e.Graphics, description, detailFont, detail, Color.FromArgb(83, 98, 119), TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
             using (var line = new Pen(Color.FromArgb(235, 239, 244))) e.Graphics.DrawLine(line, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
             if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
         }
 
-        private void AddButton(Control parent, string text, Action action, int width)
+        private Button AddButton(Control parent, string text, Action action, int width)
         {
             var button = new Button { Text = text, Width = width, Height = 32, BackColor = Color.White, FlatStyle = FlatStyle.System };
             button.Click += delegate { action(); };
             parent.Controls.Add(button);
             editControls.Add(button);
+            return button;
         }
 
         internal void ReceiveFiles(IEnumerable<string> paths)
@@ -200,11 +221,14 @@ namespace FotosParaPdf
                 return;
             }
             AddFiles(paths);
+            object selected = files.SelectedItem;
             var existing = files.Items.Cast<Photo>().ToDictionary(p => p.Path, StringComparer.OrdinalIgnoreCase);
             var sorted = Program.Prepare(existing.Keys);
             files.BeginUpdate();
             files.Items.Clear();
             foreach (string path in sorted) files.Items.Add(existing[path]);
+            if (selected != null) files.SelectedItem = selected;
+            else if (files.Items.Count > 0) files.SelectedIndex = 0;
             files.EndUpdate();
             UpdateCount();
             if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
@@ -216,6 +240,7 @@ namespace FotosParaPdf
         {
             var existing = new HashSet<string>(files.Items.Cast<Photo>().Select(p => p.Path), StringComparer.OrdinalIgnoreCase);
             foreach (string path in Program.Prepare(paths)) if (existing.Add(path)) files.Items.Add(new Photo(path));
+            if (files.SelectedIndex < 0 && files.Items.Count > 0) files.SelectedIndex = 0;
             UpdateCount();
             if (Visible) StartThumbnails();
         }
@@ -234,6 +259,7 @@ namespace FotosParaPdf
                 if (closing || photo.Removed) return;
                 Preview preview = await Task.Run(() => Photo.LoadPreview(photo.Path));
                 if (closing || photo.Removed) { if (preview.Bitmap != null) preview.Bitmap.Dispose(); return; }
+                if (preview.Bitmap != null) ImageTools.ApplyQuarterTurns(preview.Bitmap, photo.QuarterTurns);
                 photo.Thumbnail = preview.Bitmap;
                 photo.Width = preview.Width;
                 photo.Height = preview.Height;
@@ -271,6 +297,18 @@ namespace FotosParaPdf
             files.Invalidate();
         }
 
+        internal void RotateSelected(int turns)
+        {
+            if (busy || files.SelectedIndex < 0) return;
+            var photo = (Photo)files.SelectedItem;
+            photo.QuarterTurns = ImageTools.NormalizeTurns(photo.QuarterTurns + turns);
+            if (photo.Thumbnail != null) ImageTools.ApplyQuarterTurns(photo.Thumbnail, turns);
+            files.Invalidate();
+            status.ForeColor = Color.FromArgb(76, 88, 106);
+            status.Text = turns < 0 ? "Imagem girada 90° à esquerda." : "Imagem girada 90° à direita.";
+            toolTip.SetToolTip(status, "A rotação será aplicada ao PDF. O arquivo original é preservado.");
+        }
+
         private void UpdateCount()
         {
             int total = files.Items.Count;
@@ -278,11 +316,14 @@ namespace FotosParaPdf
             count.Text = total == 0 ? "Adicione imagens ou arraste os arquivos para esta janela." : SeparateMode ? images + "  ·  " + total + (total == 1 ? " PDF individual" : " PDFs individuais") : images + "  ·  1 PDF com " + total + (total == 1 ? " página" : " páginas");
             create.Text = SeparateMode ? "Criar PDFs..." : "Criar PDF...";
             create.Enabled = !busy && total > 0;
+            if (rotateLeft != null) rotateLeft.Enabled = !busy && files.SelectedIndex >= 0;
+            if (rotateRight != null) rotateRight.Enabled = !busy && files.SelectedIndex >= 0;
         }
 
         private async Task CreatePdf()
         {
             string[] images = files.Items.Cast<Photo>().Select(p => p.Path).ToArray();
+            var rotations = files.Items.Cast<Photo>().ToDictionary(p => p.Path, p => p.QuarterTurns, StringComparer.OrdinalIgnoreCase);
             if (images.Length == 0) return;
             bool individual = SeparateMode;
             PageSizing sizing = pageSize.SelectedIndex == 0 ? PageSizing.Image : PageSizing.A4;
@@ -315,14 +356,14 @@ namespace FotosParaPdf
             {
                 if (individual)
                 {
-                    ConversionResult result = await Task.Run(() => Pdf.CreateSeparate(images, destination, n => ((IProgress<int>)report).Report(n), sizing));
+                    ConversionResult result = await Task.Run(() => Pdf.CreateSeparate(images, destination, n => ((IProgress<int>)report).Report(n), sizing, rotations));
                     status.Text = result.SavedFiles.Count + (result.SavedFiles.Count == 1 ? " PDF salvo" : " PDFs salvos") + (result.Errors.Count == 0 ? " na pasta escolhida." : "; " + result.Errors.Count + " imagem(ns) com erro.");
                     if (result.Errors.Count > 0) MessageBox.Show(this, status.Text + "\n\n" + String.Join("\n\n", result.Errors.Take(5)), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     status.ForeColor = result.Errors.Count == 0 ? Color.FromArgb(21, 112, 66) : Color.FromArgb(164, 78, 0);
                 }
                 else
                 {
-                    await Task.Run(() => Pdf.Create(images, destination, n => ((IProgress<int>)report).Report(n), sizing));
+                    await Task.Run(() => Pdf.Create(images, destination, n => ((IProgress<int>)report).Report(n), sizing, true, rotations));
                     status.Text = "PDF salvo: " + Path.GetFileName(destination);
                     status.ForeColor = Color.FromArgb(21, 112, 66);
                 }
@@ -368,6 +409,7 @@ namespace FotosParaPdf
             internal Bitmap Thumbnail;
             internal int Width, Height;
             internal bool Requested, Completed, Removed;
+            internal int QuarterTurns;
             internal string Error;
             public string Name { get { return System.IO.Path.GetFileName(Path); } }
             internal Photo(string path) { Path = path; }

@@ -19,7 +19,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: System.Reflection.AssemblyTitle("Imagens para PDF")]
-[assembly: System.Reflection.AssemblyVersion("1.3.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.4.0.0")]
 [assembly: ComVisible(false)]
 
 namespace FotosParaPdf
@@ -43,13 +43,15 @@ namespace FotosParaPdf
                 if (args.Length > 0 && args[0] == "--convert")
                 {
                     if (args.Length < 3) throw new ArgumentException("Informe o PDF de destino e as imagens.");
-                    Pdf.Create(args.Skip(2).Where(a => a != "--a4").ToArray(), args[1], null, args.Contains("--a4") ? PageSizing.A4 : PageSizing.Image);
+                    string[] images = ConversionImages(args);
+                    Pdf.Create(images, args[1], null, args.Contains("--a4") ? PageSizing.A4 : PageSizing.Image, true, ReadRotations(args, images));
                     return 0;
                 }
                 if (args.Length > 0 && args[0] == "--convert-separate")
                 {
                     if (args.Length < 3) throw new ArgumentException("Informe a pasta de destino e as imagens.");
-                    var result = Pdf.CreateSeparate(args.Skip(2).Where(a => a != "--a4").ToArray(), args[1], null, args.Contains("--a4") ? PageSizing.A4 : PageSizing.Image);
+                    string[] images = ConversionImages(args);
+                    var result = Pdf.CreateSeparate(images, args[1], null, args.Contains("--a4") ? PageSizing.A4 : PageSizing.Image, ReadRotations(args, images));
                     if (result.Errors.Count > 0) throw new IOException(String.Join(Environment.NewLine, result.Errors));
                     return 0;
                 }
@@ -62,12 +64,13 @@ namespace FotosParaPdf
                 {
                     throw new InvalidOperationException("Atualize a integração executando Instalar.cmd da versão atual.");
                 }
-                if (args.Length > 1 && (args[0] == "--snapshot" || args[0] == "--snapshot-separate"))
+                if (args.Length > 1 && (args[0] == "--snapshot" || args[0] == "--snapshot-separate" || args[0] == "--snapshot-rotated"))
                 {
                     using (var form = new MainForm(args.Skip(2)))
                     {
                         form.SeparateMode = args[0] == "--snapshot-separate";
                         form.Show();
+                        if (args[0] == "--snapshot-rotated") form.RotateSelected(1);
                         DateTime deadline = DateTime.UtcNow.AddSeconds(15);
                         do { Application.DoEvents(); Thread.Sleep(20); } while (form.PendingThumbnails > 0 && DateTime.UtcNow < deadline);
                         using (var bmp = new Bitmap(form.Width, form.Height))
@@ -97,6 +100,28 @@ namespace FotosParaPdf
         internal static bool IsImage(string path)
         {
             return Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static string[] ConversionImages(string[] args)
+        {
+            return args.Skip(2).Where(a => a != "--a4" && !a.StartsWith("--rotations=", StringComparison.Ordinal)).ToArray();
+        }
+
+        private static IDictionary<string, int> ReadRotations(string[] args, string[] images)
+        {
+            string option = args.FirstOrDefault(a => a.StartsWith("--rotations=", StringComparison.Ordinal));
+            if (option == null) return null;
+            string[] angles = option.Substring("--rotations=".Length).Split(',');
+            if (angles.Length != 1 && angles.Length != images.Length) throw new ArgumentException("Informe uma rotação para todas as imagens ou uma para cada imagem.");
+            var rotations = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < images.Length; i++)
+            {
+                int degrees;
+                if (!Int32.TryParse(angles[angles.Length == 1 ? 0 : i], NumberStyles.Integer, CultureInfo.InvariantCulture, out degrees) || degrees % 90 != 0)
+                    throw new ArgumentException("A rotação precisa ser um múltiplo de 90 graus.");
+                rotations[Path.GetFullPath(images[i])] = ImageTools.NormalizeTurns(degrees / 90);
+            }
+            return rotations;
         }
 
         [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
@@ -141,7 +166,7 @@ namespace FotosParaPdf
         }
         private static string Number(double n) { return n.ToString("0.####", Invariant); }
 
-        internal static ConversionResult CreateSeparate(IList<string> files, string folder, Action<int> progress, PageSizing sizing = PageSizing.Image)
+        internal static ConversionResult CreateSeparate(IList<string> files, string folder, Action<int> progress, PageSizing sizing = PageSizing.Image, IDictionary<string, int> rotations = null)
         {
             if (files.Count == 0) throw new ArgumentException("Selecione pelo menos uma imagem.");
             folder = Path.GetFullPath(folder);
@@ -161,7 +186,7 @@ namespace FotosParaPdf
                         if (File.Exists(destination) || Directory.Exists(destination)) continue;
                         try
                         {
-                            Create(new[] { files[i] }, destination, null, sizing, false);
+                            Create(new[] { files[i] }, destination, null, sizing, false, rotations);
                             result.SavedFiles.Add(destination);
                             break;
                         }
@@ -179,7 +204,7 @@ namespace FotosParaPdf
             return result;
         }
 
-        internal static void Create(IList<string> files, string destination, Action<int> progress, PageSizing sizing = PageSizing.Image, bool overwrite = true)
+        internal static void Create(IList<string> files, string destination, Action<int> progress, PageSizing sizing = PageSizing.Image, bool overwrite = true, IDictionary<string, int> rotations = null)
         {
             if (files.Count == 0) throw new ArgumentException("Selecione pelo menos uma imagem JPG ou PNG.");
             destination = Path.GetFullPath(destination);
@@ -201,7 +226,9 @@ namespace FotosParaPdf
                     pdf.Object(2, "<< /Type /Pages /Count " + files.Count + " /Kids [ " + String.Join(" ", Enumerable.Range(0, files.Count).Select(i => (3 + i * 3) + " 0 R")) + " ] >>");
                     for (int i = 0; i < files.Count; i++)
                     {
-                        try { pdf.AddPage(files[i], 3 + i * 3, sizing); }
+                        int turns = 0;
+                        if (rotations != null) rotations.TryGetValue(Path.GetFullPath(files[i]), out turns);
+                        try { pdf.AddPage(files[i], 3 + i * 3, sizing, turns); }
                         catch (Exception ex) { throw new IOException("Não foi possível ler a imagem \"" + Path.GetFileName(files[i]) + "\".\n" + ex.Message, ex); }
                         if (progress != null) progress(i + 1);
                     }
@@ -217,7 +244,7 @@ namespace FotosParaPdf
             finally { if (File.Exists(temp)) File.Delete(temp); }
         }
 
-        private void AddPage(string path, int number, PageSizing sizing)
+        private void AddPage(string path, int number, PageSizing sizing, int turns)
         {
             using (Image image = Image.FromFile(path, true))
             {
@@ -226,6 +253,9 @@ namespace FotosParaPdf
                 double dpiY = ImageTools.ValidDpi(image.VerticalResolution);
                 int orientation = ImageTools.ApplyOrientation(image);
                 if (orientation >= 5 && orientation <= 8) { double swap = dpiX; dpiX = dpiY; dpiY = swap; }
+                turns = ImageTools.NormalizeTurns(turns);
+                ImageTools.ApplyQuarterTurns(image, turns);
+                if (turns % 2 != 0) { double swap = dpiX; dpiX = dpiY; dpiY = swap; }
                 int width = image.Width, height = image.Height;
                 double pageWidth, pageHeight, w, h;
                 if (sizing == PageSizing.Image)
@@ -246,7 +276,7 @@ namespace FotosParaPdf
                 StreamObject(number + 1, "", Encoding.ASCII.GetBytes(commands));
                 byte[] bytes;
                 string filter;
-                if (!isPng && orientation == 1 && JpegComponents(path) == 3)
+                if (!isPng && orientation == 1 && turns == 0 && JpegComponents(path) == 3)
                 {
                     bytes = File.ReadAllBytes(path);
                     filter = "/DCTDecode";
@@ -367,7 +397,7 @@ namespace FotosParaPdf
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\FotosParaPdf"))
             {
                 key.SetValue("DisplayName", "Imagens para PDF");
-                key.SetValue("DisplayVersion", "1.3.0");
+                key.SetValue("DisplayVersion", "1.4.0");
                 key.SetValue("DisplayIcon", "\"" + target + "\",0");
                 key.SetValue("Publisher", "Fotos para PDF (aplicativo local)");
                 key.SetValue("UninstallString", "\"" + target + "\" --uninstall");

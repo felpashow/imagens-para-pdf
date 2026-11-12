@@ -1,18 +1,20 @@
-Prévias das imagens e mais controle sobre os PDFs gerados.
+Gire suas imagens antes de criar o PDF.
 
-### Novidades da versão 1.3.0
+### Novidades da versão 1.4.0
 
-- **Miniaturas das imagens** na lista, com nome e dimensões.
-- **Um PDF por imagem**: por exemplo, três imagens geram três PDFs separados.
-- **Juntar em um PDF** continua disponível, com ajuste da ordem das páginas.
-- **Página no tamanho da imagem**, sem margens, como padrão. A4 continua como alternativa.
-- **Sem pergunta para abrir o arquivo** após salvar: a confirmação aparece na própria janela.
-- Nomes repetidos recebem `(2)`, `(3)` etc., sem sobrescrever PDFs existentes no modo individual.
+- **Girar à esquerda** e **Girar à direita**: cada clique gira a imagem selecionada 90°.
+- A prévia muda na hora e o PDF recebe a mesma rotação.
+- Funciona nos modos de PDF único e de um PDF por imagem.
+- A rotação é mantida ao reordenar, adicionar imagens ou trocar as opções de saída.
+- O tamanho da página acompanha a orientação final da imagem.
+- Os arquivos originais são preservados.
+
+Continuam disponíveis as miniaturas, PDFs individuais, páginas no tamanho da imagem ou A4 e salvamento sem pergunta para abrir o resultado.
 
 ### Instalar ou atualizar
 
 1. Feche a janela do programa, se estiver aberta.
-2. Baixe **Fotos-para-PDF-v1.3.zip** em Assets e extraia o ZIP inteiro.
+2. Baixe **Fotos-para-PDF-v1.4.zip** em Assets e extraia o ZIP inteiro.
 3. Execute **Instalar.cmd** novamente para atualizar.
 4. Selecione as fotos e escolha **Criar PDF com as imagens** no botão direito. No Windows 11, abra **Mostrar mais opções**.
 
