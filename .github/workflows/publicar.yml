@@ -1,0 +1,92 @@
+name: Publicar instalador
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Versão a publicar (por exemplo, v1.2.0)
+        required: true
+        default: v1.2.0
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Compilar e publicar o ZIP para Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Compilar o aplicativo
+        shell: powershell
+        run: .\codigo-fonte\Recompilar.ps1
+
+      - name: Montar e verificar o pacote
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw 'A tag precisa seguir o formato v1.2.0.'
+          }
+          $assembly = [Reflection.AssemblyName]::GetAssemblyName((Join-Path $PWD 'FotosParaPdf.exe'))
+          $version = $assembly.Version
+          $expectedTag = 'v' + $version.ToString(3)
+          if ($env:RELEASE_TAG -ne $expectedTag) {
+            throw "A tag $env:RELEASE_TAG não corresponde à versão $expectedTag do aplicativo."
+          }
+          $package = Join-Path $PWD 'dist\Fotos-para-PDF'
+          New-Item -ItemType Directory -Path $package -Force | Out-Null
+          Copy-Item -LiteralPath @('FotosParaPdf.exe','Instalar.cmd','Desinstalar.cmd','LEIA-ME.txt','assets','codigo-fonte') -Destination $package -Recurse
+          $zipName = 'Fotos-para-PDF-v' + $version.Major + '.' + $version.Minor + '.zip'
+          if ($version.Build -gt 0) {
+            $zipName = 'Fotos-para-PDF-v' + $version.ToString(3) + '.zip'
+          }
+          $zipPath = Join-Path $PWD ('dist\' + $zipName)
+          Compress-Archive -LiteralPath $package -DestinationPath $zipPath
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\','/') })
+            foreach ($required in @('Fotos-para-PDF/FotosParaPdf.exe','Fotos-para-PDF/Instalar.cmd','Fotos-para-PDF/Desinstalar.cmd','Fotos-para-PDF/assets/icone-fotos-para-pdf.ico')) {
+              if ($required -notin $names) { throw "Arquivo ausente no ZIP: $required" }
+            }
+          } finally { $archive.Dispose() }
+          $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksumPath = Join-Path $PWD 'dist\SHA256SUMS.txt'
+          Set-Content -LiteralPath $checksumPath -Value "$hash  $zipName" -Encoding ascii
+          "PACKAGE_FILE=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CHECKSUM_FILE=$checksumPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Publicar a versão com o instalador
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $published = gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json assets 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $existing = ($published | ConvertFrom-Json).assets.name
+            foreach ($file in @($env:PACKAGE_FILE, $env:CHECKSUM_FILE)) {
+              if ((Split-Path -Leaf $file) -in $existing) {
+                throw 'O instalador desta versão já foi publicado. Nenhum arquivo será substituído.'
+              }
+            }
+            gh release upload $env:RELEASE_TAG $env:PACKAGE_FILE $env:CHECKSUM_FILE --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $env:RELEASE_TAG $env:PACKAGE_FILE $env:CHECKSUM_FILE --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Imagens para PDF $($env:RELEASE_TAG.TrimStart('v'))" --notes-file docs/RELEASE.md --latest
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'A publicação no GitHub falhou.' }
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json url,assets
+          if ($LASTEXITCODE -ne 0) { throw 'Não foi possível verificar a versão publicada.' }
