@@ -1,20 +1,20 @@
-Transforme imagens JPG e PNG em um único PDF pelo botão direito do Windows.
+Prévias das imagens e mais controle sobre os PDFs gerados.
 
-### Instalação
+### Novidades da versão 1.3.0
 
-1. Baixe **Fotos-para-PDF-v1.2.zip** em Assets.
-2. Extraia o ZIP inteiro para uma pasta.
-3. Execute **Instalar.cmd**.
+- **Miniaturas das imagens** na lista, com nome e dimensões.
+- **Um PDF por imagem**: por exemplo, três imagens geram três PDFs separados.
+- **Juntar em um PDF** continua disponível, com ajuste da ordem das páginas.
+- **Página no tamanho da imagem**, sem margens, como padrão. A4 continua como alternativa.
+- **Sem pergunta para abrir o arquivo** após salvar: a confirmação aparece na própria janela.
+- Nomes repetidos recebem `(2)`, `(3)` etc., sem sobrescrever PDFs existentes no modo individual.
+
+### Instalar ou atualizar
+
+1. Feche a janela do programa, se estiver aberta.
+2. Baixe **Fotos-para-PDF-v1.3.zip** em Assets e extraia o ZIP inteiro.
+3. Execute **Instalar.cmd** novamente para atualizar.
 4. Selecione as fotos e escolha **Criar PDF com as imagens** no botão direito. No Windows 11, abra **Mostrar mais opções**.
 
-### Incluído nesta versão
-
-- Uma imagem por página A4, sem cortes.
-- Ajuste da ordem das fotos antes de salvar.
-- Processamento local e preservação dos originais.
-- Ícone próprio no aplicativo e no menu.
-- Código-fonte e instruções de compilação.
-
-Para atualizar, feche o aplicativo e execute Instalar.cmd do novo pacote.
-
+Os originais são preservados. O processamento continua inteiramente local.
 O arquivo SHA256SUMS.txt contém a soma de verificação do ZIP.

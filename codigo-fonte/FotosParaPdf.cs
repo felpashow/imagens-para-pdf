@@ -18,8 +18,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyTitle("Fotos para PDF")]
-[assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
+[assembly: System.Reflection.AssemblyTitle("Imagens para PDF")]
+[assembly: System.Reflection.AssemblyVersion("1.3.0.0")]
 [assembly: ComVisible(false)]
 
 namespace FotosParaPdf
@@ -43,7 +43,14 @@ namespace FotosParaPdf
                 if (args.Length > 0 && args[0] == "--convert")
                 {
                     if (args.Length < 3) throw new ArgumentException("Informe o PDF de destino e as imagens.");
-                    Pdf.Create(args.Skip(2).ToArray(), args[1], null);
+                    Pdf.Create(args.Skip(2).Where(a => a != "--a4").ToArray(), args[1], null, args.Contains("--a4") ? PageSizing.A4 : PageSizing.Image);
+                    return 0;
+                }
+                if (args.Length > 0 && args[0] == "--convert-separate")
+                {
+                    if (args.Length < 3) throw new ArgumentException("Informe a pasta de destino e as imagens.");
+                    var result = Pdf.CreateSeparate(args.Skip(2).Where(a => a != "--a4").ToArray(), args[1], null, args.Contains("--a4") ? PageSizing.A4 : PageSizing.Image);
+                    if (result.Errors.Count > 0) throw new IOException(String.Join(Environment.NewLine, result.Errors));
                     return 0;
                 }
                 if (args.Length > 2 && args[0] == "--ipc-test-server")
@@ -55,12 +62,14 @@ namespace FotosParaPdf
                 {
                     throw new InvalidOperationException("Atualize a integração executando Instalar.cmd da versão atual.");
                 }
-                if (args.Length > 1 && args[0] == "--snapshot")
+                if (args.Length > 1 && (args[0] == "--snapshot" || args[0] == "--snapshot-separate"))
                 {
                     using (var form = new MainForm(args.Skip(2)))
                     {
+                        form.SeparateMode = args[0] == "--snapshot-separate";
                         form.Show();
-                        Application.DoEvents();
+                        DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+                        do { Application.DoEvents(); Thread.Sleep(20); } while (form.PendingThumbnails > 0 && DateTime.UtcNow < deadline);
                         using (var bmp = new Bitmap(form.Width, form.Height))
                         {
                             form.DrawToBitmap(bmp, new Rectangle(Point.Empty, form.Size));
@@ -75,7 +84,7 @@ namespace FotosParaPdf
             catch (Exception ex)
             {
                 ExitCode = 1;
-                if (args.Length > 0 && (args[0] == "--convert" || args[0] == "--ipc-test-server"))
+                if (args.Length > 0 && (args[0] == "--convert" || args[0] == "--convert-separate" || args[0] == "--ipc-test-server"))
                 {
                     Console.Error.WriteLine(ex.ToString());
                     if (args.Length > 1) File.WriteAllText(args[1] + ".error.txt", ex.ToString());
@@ -101,187 +110,12 @@ namespace FotosParaPdf
         }
     }
 
-    internal sealed class MainForm : Form
+    internal enum PageSizing { Image, A4 }
+
+    internal sealed class ConversionResult
     {
-        private readonly ListBox files = new ListBox();
-        private readonly Label count = new Label();
-        private readonly Label status = new Label();
-        private readonly Button create = new Button();
-        private readonly ProgressBar progress = new ProgressBar();
-        private readonly List<Control> editControls = new List<Control>();
-        private bool busy;
-
-        internal MainForm(IEnumerable<string> paths)
-        {
-            Text = "Fotos para PDF";
-            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            Font = new Font("Segoe UI", 10F);
-            BackColor = Color.FromArgb(246, 248, 251);
-            StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(700, 520);
-            MinimumSize = new Size(640, 500);
-            AutoScaleMode = AutoScaleMode.Dpi;
-            AllowDrop = true;
-
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1, RowCount = 7 };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-            Controls.Add(layout);
-            layout.Controls.Add(new Label { Text = "Suas fotos, em um único PDF", Font = new Font("Segoe UI", 19, FontStyle.Bold), AutoSize = true }, 0, 0);
-            layout.Controls.Add(new Label { Text = "Uma imagem por página A4, sem recortar. Confira a ordem abaixo.\nTodo o processamento acontece neste computador.", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(76, 88, 106) }, 0, 1);
-            count.Dock = DockStyle.Fill;
-            count.TextAlign = ContentAlignment.MiddleLeft;
-            layout.Controls.Add(count, 0, 2);
-            files.Dock = DockStyle.Fill;
-            files.IntegralHeight = false;
-            files.HorizontalScrollbar = true;
-            files.DisplayMember = "Name";
-            files.SelectionMode = SelectionMode.One;
-            files.BorderStyle = BorderStyle.FixedSingle;
-            files.Font = new Font("Segoe UI", 11);
-            files.SelectedIndexChanged += delegate { UpdateCount(); };
-            layout.Controls.Add(files, 0, 3);
-
-            var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0), WrapContents = false };
-            AddButton(toolbar, "Adicionar fotos", delegate { ChooseFiles(); }, 130);
-            AddButton(toolbar, "Subir", delegate { MovePhoto(-1); }, 72);
-            AddButton(toolbar, "Descer", delegate { MovePhoto(1); }, 72);
-            AddButton(toolbar, "Remover", delegate { if (files.SelectedIndex >= 0) files.Items.RemoveAt(files.SelectedIndex); UpdateCount(); }, 94);
-            layout.Controls.Add(toolbar, 0, 4);
-            progress.Dock = DockStyle.Fill;
-            progress.Margin = new Padding(0, 7, 0, 7);
-            layout.Controls.Add(progress, 0, 5);
-            var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-            status.Text = "As imagens originais são preservadas.";
-            status.Dock = DockStyle.Fill;
-            status.TextAlign = ContentAlignment.MiddleLeft;
-            status.ForeColor = Color.FromArgb(76, 88, 106);
-            footer.Controls.Add(status, 0, 0);
-            create.Text = "Criar PDF...";
-            create.Dock = DockStyle.Fill;
-            create.Margin = new Padding(8, 7, 0, 3);
-            create.BackColor = Color.FromArgb(29, 78, 216);
-            create.ForeColor = Color.White;
-            create.FlatStyle = FlatStyle.Flat;
-            create.FlatAppearance.BorderSize = 0;
-            create.Click += async delegate { await CreatePdf(); };
-            footer.Controls.Add(create, 1, 0);
-            layout.Controls.Add(footer, 0, 6);
-            DragEnter += delegate(object sender, DragEventArgs e) { if (!busy && e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy; };
-            DragDrop += delegate(object sender, DragEventArgs e) { if (!busy) AddFiles((string[])e.Data.GetData(DataFormats.FileDrop)); };
-            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (busy) e.Cancel = true; };
-            AddFiles(paths);
-        }
-
-        private void AddButton(Control parent, string text, Action action, int width)
-        {
-            var button = new Button { Text = text, Width = width, Height = 32, BackColor = Color.White, FlatStyle = FlatStyle.System };
-            button.Click += delegate { action(); };
-            parent.Controls.Add(button);
-            editControls.Add(button);
-        }
-
-        internal void ReceiveFiles(IEnumerable<string> paths)
-        {
-            if (busy)
-            {
-                MessageBox.Show(this, "Aguarde a conversão atual antes de adicionar novas imagens.", "Fotos para PDF", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            AddFiles(paths);
-            // Explorer may start one short-lived process per selected file.
-            // Sorting the complete list makes the order independent of startup timing.
-            var sorted = Program.Prepare(files.Items.Cast<Photo>().Select(p => p.Path));
-            files.BeginUpdate();
-            files.Items.Clear();
-            foreach (string path in sorted) files.Items.Add(new Photo(path));
-            files.EndUpdate();
-            UpdateCount();
-            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
-            Show();
-            Activate();
-        }
-
-        private void AddFiles(IEnumerable<string> paths)
-        {
-            var existing = new HashSet<string>(files.Items.Cast<Photo>().Select(p => p.Path), StringComparer.OrdinalIgnoreCase);
-            foreach (var path in Program.Prepare(paths)) if (existing.Add(path)) files.Items.Add(new Photo(path));
-            UpdateCount();
-        }
-
-        private void ChooseFiles()
-        {
-            using (var dialog = new OpenFileDialog { Filter = "Fotos JPG e PNG|*.jpg;*.jpeg;*.png", Multiselect = true, Title = "Escolha as fotos" })
-                if (dialog.ShowDialog(this) == DialogResult.OK) AddFiles(dialog.FileNames);
-        }
-
-        private void MovePhoto(int direction)
-        {
-            int oldIndex = files.SelectedIndex;
-            int newIndex = oldIndex + direction;
-            if (oldIndex < 0 || newIndex < 0 || newIndex >= files.Items.Count) return;
-            object item = files.Items[oldIndex];
-            files.Items.RemoveAt(oldIndex);
-            files.Items.Insert(newIndex, item);
-            files.SelectedIndex = newIndex;
-        }
-
-        private void UpdateCount()
-        {
-            count.Text = files.Items.Count + (files.Items.Count == 1 ? " imagem · 1 página" : " imagens · " + files.Items.Count + " páginas");
-            create.Enabled = !busy && files.Items.Count > 0;
-        }
-
-        private async Task CreatePdf()
-        {
-            string[] images = files.Items.Cast<Photo>().Select(p => p.Path).ToArray();
-            string destination;
-            using (var dialog = new SaveFileDialog { Filter = "Documento PDF|*.pdf", DefaultExt = "pdf", AddExtension = true, OverwritePrompt = true, FileName = images.Length == 1 ? Path.GetFileNameWithoutExtension(images[0]) + ".pdf" : "Fotos.pdf", InitialDirectory = Path.GetDirectoryName(images[0]), Title = "Salvar as fotos em um único PDF" })
-            {
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                destination = dialog.FileName;
-            }
-            busy = true;
-            create.Enabled = false;
-            foreach (Control control in editControls) control.Enabled = false;
-            progress.Maximum = images.Length;
-            progress.Value = 0;
-            var report = new Progress<int>(n => { progress.Value = n; status.Text = "Convertendo " + n + " de " + images.Length + "..."; });
-            try
-            {
-                await Task.Run(() => Pdf.Create(images, destination, n => ((IProgress<int>)report).Report(n)));
-                status.Text = "PDF criado com " + images.Length + (images.Length == 1 ? " página." : " páginas.");
-                if (MessageBox.Show(this, "Seu PDF foi salvo.\n\nDeseja abrir o arquivo?", "PDF criado", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
-                    Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                status.Text = "Não foi possível criar o PDF.";
-                MessageBox.Show(this, ex.Message, "Fotos para PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                busy = false;
-                foreach (Control control in editControls) control.Enabled = true;
-                UpdateCount();
-            }
-        }
-
-        private sealed class Photo
-        {
-            internal readonly string Path;
-            public string Name { get { return System.IO.Path.GetFileName(Path); } }
-            internal Photo(string path) { Path = path; }
-            public override string ToString() { return Name; }
-        }
+        internal readonly List<string> SavedFiles = new List<string>();
+        internal readonly List<string> Errors = new List<string>();
     }
 
     internal sealed class Pdf : IDisposable
@@ -307,7 +141,45 @@ namespace FotosParaPdf
         }
         private static string Number(double n) { return n.ToString("0.####", Invariant); }
 
-        internal static void Create(IList<string> files, string destination, Action<int> progress)
+        internal static ConversionResult CreateSeparate(IList<string> files, string folder, Action<int> progress, PageSizing sizing = PageSizing.Image)
+        {
+            if (files.Count == 0) throw new ArgumentException("Selecione pelo menos uma imagem.");
+            folder = Path.GetFullPath(folder);
+            if (!Directory.Exists(folder)) throw new DirectoryNotFoundException("A pasta de destino não foi encontrada.");
+            var result = new ConversionResult();
+            for (int i = 0; i < files.Count; i++)
+            {
+                try
+                {
+                    string stem = Path.GetFileNameWithoutExtension(files[i]);
+                    int suffix = 1;
+                    while (true)
+                    {
+                        string name = stem + (suffix == 1 ? "" : " (" + suffix + ")") + ".pdf";
+                        string destination = Path.Combine(folder, name);
+                        suffix++;
+                        if (File.Exists(destination) || Directory.Exists(destination)) continue;
+                        try
+                        {
+                            Create(new[] { files[i] }, destination, null, sizing, false);
+                            result.SavedFiles.Add(destination);
+                            break;
+                        }
+                        catch (IOException)
+                        {
+                            // If another process claimed this name, choose the next one without overwriting it.
+                            if (!File.Exists(destination) && !Directory.Exists(destination)) throw;
+                            if (suffix > 10000) throw;
+                        }
+                    }
+                }
+                catch (Exception ex) { result.Errors.Add(Path.GetFileName(files[i]) + ": " + ex.Message); }
+                if (progress != null) progress(i + 1);
+            }
+            return result;
+        }
+
+        internal static void Create(IList<string> files, string destination, Action<int> progress, PageSizing sizing = PageSizing.Image, bool overwrite = true)
         {
             if (files.Count == 0) throw new ArgumentException("Selecione pelo menos uma imagem JPG ou PNG.");
             destination = Path.GetFullPath(destination);
@@ -329,7 +201,7 @@ namespace FotosParaPdf
                     pdf.Object(2, "<< /Type /Pages /Count " + files.Count + " /Kids [ " + String.Join(" ", Enumerable.Range(0, files.Count).Select(i => (3 + i * 3) + " 0 R")) + " ] >>");
                     for (int i = 0; i < files.Count; i++)
                     {
-                        try { pdf.AddPage(files[i], 3 + i * 3); }
+                        try { pdf.AddPage(files[i], 3 + i * 3, sizing); }
                         catch (Exception ex) { throw new IOException("Não foi possível ler a imagem \"" + Path.GetFileName(files[i]) + "\".\n" + ex.Message, ex); }
                         if (progress != null) progress(i + 1);
                     }
@@ -339,30 +211,36 @@ namespace FotosParaPdf
                     pdf.Text("trailer\n<< /Size " + pdf.offsets.Count + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n");
                     pdf.output.Flush(true);
                 }
-                if (File.Exists(destination)) File.Replace(temp, destination, null);
+                if (overwrite && File.Exists(destination)) File.Replace(temp, destination, null);
                 else File.Move(temp, destination);
             }
             finally { if (File.Exists(temp)) File.Delete(temp); }
         }
 
-        private void AddPage(string path, int number)
+        private void AddPage(string path, int number, PageSizing sizing)
         {
             using (Image image = Image.FromFile(path, true))
             {
                 bool isPng = image.RawFormat.Guid == ImageFormat.Png.Guid;
-                int orientation = 1;
-                if (image.PropertyIdList.Contains(0x112))
-                {
-                    byte[] value = image.GetPropertyItem(0x112).Value;
-                    if (value.Length >= 2) orientation = BitConverter.ToUInt16(value, 0);
-                }
-                RotateFlipType[] rotations = { RotateFlipType.RotateNoneFlipNone, RotateFlipType.RotateNoneFlipNone, RotateFlipType.RotateNoneFlipX, RotateFlipType.Rotate180FlipNone, RotateFlipType.Rotate180FlipX, RotateFlipType.Rotate90FlipX, RotateFlipType.Rotate90FlipNone, RotateFlipType.Rotate270FlipX, RotateFlipType.Rotate270FlipNone };
-                if (orientation >= 2 && orientation <= 8) image.RotateFlip(rotations[orientation]);
+                double dpiX = ImageTools.ValidDpi(image.HorizontalResolution);
+                double dpiY = ImageTools.ValidDpi(image.VerticalResolution);
+                int orientation = ImageTools.ApplyOrientation(image);
+                if (orientation >= 5 && orientation <= 8) { double swap = dpiX; dpiX = dpiY; dpiY = swap; }
                 int width = image.Width, height = image.Height;
-                double pageWidth = width > height ? 841.8898 : 595.2756;
-                double pageHeight = width > height ? 595.2756 : 841.8898;
-                double scale = Math.Min((pageWidth - 24) / width, (pageHeight - 24) / height);
-                double w = width * scale, h = height * scale;
+                double pageWidth, pageHeight, w, h;
+                if (sizing == PageSizing.Image)
+                {
+                    pageWidth = w = width * 72.0 / dpiX;
+                    pageHeight = h = height * 72.0 / dpiY;
+                }
+                else
+                {
+                    pageWidth = width > height ? 841.8898 : 595.2756;
+                    pageHeight = width > height ? 595.2756 : 841.8898;
+                    double scale = Math.Min((pageWidth - 24) / width, (pageHeight - 24) / height);
+                    w = width * scale;
+                    h = height * scale;
+                }
                 Object(number, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + Number(pageWidth) + " " + Number(pageHeight) + "] /Resources << /XObject << /Im0 " + (number + 2) + " 0 R >> >> /Contents " + (number + 1) + " 0 R >>");
                 string commands = "q\n" + Number(w) + " 0 0 " + Number(h) + " " + Number((pageWidth - w) / 2) + " " + Number((pageHeight - h) / 2) + " cm\n/Im0 Do\nQ\n";
                 StreamObject(number + 1, "", Encoding.ASCII.GetBytes(commands));
@@ -488,8 +366,8 @@ namespace FotosParaPdf
             }
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\FotosParaPdf"))
             {
-                key.SetValue("DisplayName", "Fotos para PDF");
-                key.SetValue("DisplayVersion", "1.2.0");
+                key.SetValue("DisplayName", "Imagens para PDF");
+                key.SetValue("DisplayVersion", "1.3.0");
                 key.SetValue("DisplayIcon", "\"" + target + "\",0");
                 key.SetValue("Publisher", "Fotos para PDF (aplicativo local)");
                 key.SetValue("UninstallString", "\"" + target + "\" --uninstall");

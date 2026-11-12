@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Versão a publicar (por exemplo, v1.2.0)
+        description: Versão a publicar (por exemplo, v1.3.0)
         required: true
-        default: v1.2.0
+        default: v1.3.0
         type: string
 
 permissions:
