@@ -1,0 +1,25 @@
+# Arquivos gerados
+*.exe
+*.pdb
+*.zip
+*.error.txt
+.fotos-para-pdf-*.tmp
+bin/
+obj/
+dist/
+work/
+outputs/
+
+# PDFs e fotografias de entrada
+*.pdf
+*.jpg
+*.jpeg
+
+# Configuração local
+.vs/
+.idea/
+.env
+.env.*
+!.env.example
+Thumbs.db
+Desktop.ini

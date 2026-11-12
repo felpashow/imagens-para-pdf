@@ -1,0 +1,6 @@
+Ícone Fotos para PDF
+Gerado com a ferramenta integrada de geração de imagens (image_gen).
+PNG original com transparência; ICO exportado para 16, 24, 32, 48, 64, 128 e 256 pixels.
+
+Prompt utilizado:
+Use case: logo-brand. Asset type: a finished square Windows application icon for a local photo-to-PDF converter named Fotos para PDF. Create ONE standalone icon, centered, front-facing, with an actual transparent background. Subject: a blue rounded photo tile showing one simple mountain silhouette and a small sun, partially behind a crisp white portrait document with a folded upper-right corner. The document has a bold red lower band with the exact uppercase text "PDF" in white, clean sans-serif lettering. The photo tile and document overlap into one compact, immediately recognizable mark. Style: polished flat 2D app icon, crisp edges, generous simple shapes, subtle dark-navy outline so the white document reads on both light and dark backgrounds. Use blue, white and red accents. Composition: 1:1 square, centered, tight cohesive silhouette occupying around 84% of the canvas with generous transparent safety padding, suitable for reducing to 16, 24, 32, 48 and 256 pixels. No background panel, no checkerboard pattern, no scene, no mockup, no multiple icon variants, no watermark, no extra text, no Adobe logo, no tiny decoration, no 3D perspective, no long shadows.

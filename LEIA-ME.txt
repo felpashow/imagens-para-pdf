@@ -1,0 +1,88 @@
+FOTOS PARA PDF - versão 1.2
+
+Selecione fotos JPG/PNG no Explorador de Arquivos e crie um único PDF,
+com uma imagem por página. Tudo funciona localmente, sem internet.
+
+INSTALAR
+1. Extraia o ZIP inteiro para uma pasta.
+2. Dê dois cliques em Instalar.cmd.
+3. Aguarde a mensagem de instalação concluída.
+
+A instalação vale apenas para o usuário atual. Não precisa de administrador,
+Python, Adobe Acrobat nem programas adicionais em um Windows 10/11 comum.
+O programa usa o .NET Framework 4.x que acompanha essas versões do Windows.
+
+ATUALIZAR UMA INSTALAÇÃO ANTERIOR
+Feche a janela do programa, extraia este pacote e execute Instalar.cmd de novo.
+A versão 1.2 inclui um ícone próprio no programa e no menu do botão direito.
+O ícone está incorporado ao executável. As versões PNG e ICO também estão
+disponíveis na pasta assets para reutilização.
+A versão 1.1 remove a ativação COM usada na versão 1.0 e passa a chamar o
+executável diretamente. Invocações simultâneas são reunidas na mesma janela.
+Se a versão antiga ainda estiver rodando após uma falha, aguarde um minuto
+antes de atualizar para que o processo encerre e libere o executável.
+
+USAR PELO BOTÃO DIREITO
+1. Selecione uma ou várias fotos .jpg, .jpeg ou .png. Pode misturar os formatos.
+2. Clique com o botão direito sobre a seleção.
+3. No Windows 11, clique em "Mostrar mais opções".
+4. Escolha "Criar PDF com as imagens".
+5. Confira a lista. Use "Subir" e "Descer" para ajustar a ordem.
+6. Clique em "Criar PDF..." e escolha onde salvar.
+
+Você também pode abrir FotosParaPdf.exe diretamente e usar "Adicionar fotos"
+ou arrastar as imagens para a janela.
+
+COMO O PDF É CRIADO
+- Um único arquivo PDF para toda a seleção, com uma imagem por página.
+- Páginas A4: retrato ou paisagem, conforme a proporção de cada imagem.
+- A imagem inteira cabe na página, sem cortes, com pequena margem branca.
+- A ordem inicial é pelo nome: foto 2 vem antes de foto 10. A ordem dos cliques
+  no Explorador não determina a ordem das páginas.
+- As fotos originais não são alteradas ou apagadas.
+- A rotação EXIF de fotos de celular é aplicada.
+- O fundo transparente de PNG fica branco. PNG usa compressão sem perdas.
+- JPG RGB sem rotação é incorporado sem recompressão. Os demais JPGs são
+  normalizados em RGB com qualidade 95, mantendo a resolução em pixels.
+- O PDF contém imagens. Texto fotografado continua sendo imagem; não há OCR.
+- Se alguma imagem falhar, nenhum PDF incompleto substitui o arquivo anterior.
+
+DESINSTALAR
+Dê dois cliques em Desinstalar.cmd nesta pasta. A opção será removida do menu.
+Também é possível desinstalar "Fotos para PDF" nas configurações do Windows.
+Se usar as configurações, o executável que estava em execução pode permanecer
+na pasta indicada na mensagem; você pode excluí-lo depois de fechar a janela.
+Seus PDFs e fotos são preservados.
+
+DETALHES DA INSTALAÇÃO
+O programa é copiado para %LOCALAPPDATA%\FotosParaPdf\FotosParaPdf.exe.
+Somente as chaves próprias do programa no Registro do usuário são criadas:
+HKCU\Software\Classes\SystemFileAssociations\[.jpg|.jpeg|.png]\shell\FotosParaPdf.Unir
+HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\FotosParaPdf
+As associações padrão dos arquivos não são alteradas.
+
+LIMITES DESTA VERSÃO
+A integração usa o menu clássico do Explorador. No Windows 11 ela fica dentro
+de "Mostrar mais opções". Não inclui o menu moderno de primeiro nível.
+Esta versão não aceita HEIC, WebP ou documentos de outros formatos.
+O menu clássico limita esta modalidade de seleção a 100 arquivos por vez.
+Para adicionar mais imagens, use "Adicionar fotos" na própria janela.
+Seleções novas são adicionadas à janela aberta. Confira a lista antes de salvar
+e remova os itens que não devem fazer parte do PDF atual.
+
+VERIFICAÇÃO REALIZADA
+Foram testados: PDF com seis imagens, mistura de JPG/PNG, transparência,
+rotação EXIF, JPG em escala de cinza e CMYK, preservação dos originais,
+substituição de PDF existente, proteção contra imagem inválida e recepção
+de invocações simultâneas reunidas por pipe em uma única instância.
+A interface e as seis páginas renderizadas foram inspecionadas visualmente.
+A instalação da versão atual e o clique no menu do Explorador ainda precisam ser
+validados no usuário principal; execute Instalar.cmd para atualizar a opção.
+
+CÓDIGO-FONTE
+A pasta codigo-fonte contém o código C# e um script Recompilar.ps1.
+O executável não usa bibliotecas de terceiros nem faz conexões de rede.
+
+Referências técnicas da Microsoft:
+https://learn.microsoft.com/en-us/windows/win32/shell/how-to-employ-the-verb-selection-model
+https://learn.microsoft.com/en-us/dotnet/api/system.io.pipes.namedpipeserverstream
